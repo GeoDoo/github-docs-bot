@@ -20,4 +20,10 @@ describe('Default Config', () => {
   it('ignores private functions by default', () => {
     expect(DEFAULT_CONFIG.ignore.patterns).toContain('_*');
   });
+
+  it('has bootstrap enabled by default', () => {
+    expect(DEFAULT_CONFIG.bootstrap.enabled).toBe(true);
+    expect(DEFAULT_CONFIG.bootstrap.max_files_per_pr).toBe(50);
+    expect(DEFAULT_CONFIG.bootstrap.branch).toBe('docs/initial-documentation');
+  });
 });

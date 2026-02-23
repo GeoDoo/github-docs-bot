@@ -1,36 +1,31 @@
 import yaml from 'js-yaml';
-import type { Context } from 'probot';
-import type { BotConfig } from '../types/index.js';
+import type { RepoRef, BotConfig } from '../types/index.js';
 import { DEFAULT_CONFIG } from './defaults.js';
+import { getFileContent } from '../services/github.js';
 
 const CONFIG_PATH = '.github/docs-bot.yml';
 
+/**
+ * Loads repo-specific config from .github/docs-bot.yml, falling back to
+ * defaults for any missing values. Works with any RepoRef (PR handler,
+ * installation handler, etc.).
+ */
 export async function loadConfig(
-  context: Context<'pull_request'>,
+  ref: RepoRef,
+  gitRef: string,
 ): Promise<BotConfig> {
-  const { owner, repo } = context.repo();
-
   try {
-    const response = await context.octokit.repos.getContent({
-      owner,
-      repo,
-      path: CONFIG_PATH,
-      ref: context.payload.pull_request.base.ref,
-    });
+    const content = await getFileContent(ref, CONFIG_PATH, gitRef);
 
-    if ('content' in response.data) {
-      const content = Buffer.from(
-        response.data.content,
-        'base64',
-      ).toString('utf-8');
+    if (content) {
       const userConfig = yaml.load(content) as Record<string, unknown>;
-      return deepMerge(structuredClone(DEFAULT_CONFIG) as unknown as Record<string, unknown>, userConfig) as unknown as BotConfig;
+      return deepMerge(
+        structuredClone(DEFAULT_CONFIG) as unknown as Record<string, unknown>,
+        userConfig,
+      ) as unknown as BotConfig;
     }
-  } catch (error: unknown) {
-    const status = (error as { status?: number }).status;
-    if (status !== 404) {
-      context.log.warn({ error }, 'Failed to load docs-bot.yml, using defaults');
-    }
+  } catch {
+    // Config file missing or unreadable — use defaults
   }
 
   return structuredClone(DEFAULT_CONFIG);

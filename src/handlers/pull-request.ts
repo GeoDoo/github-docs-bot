@@ -3,7 +3,7 @@ import { loadConfig } from '../config/loader.js';
 import { analyzePR } from '../services/analyzer.js';
 import { generateDocs, applyDocs } from '../services/generator.js';
 import { commitDocUpdates } from '../services/committer.js';
-import type { BotConfig } from '../types/index.js';
+import type { BotConfig, RepoRef } from '../types/index.js';
 
 const BOT_SUFFIX = '[bot]';
 
@@ -29,16 +29,18 @@ export async function handlePullRequest(
 ): Promise<void> {
   const pr = context.payload.pull_request;
   const { owner, repo } = context.repo();
-  context.log.info(`Processing PR #${pr.number}: ${pr.title}`);
+  const ref: RepoRef = { octokit: context.octokit, owner, repo };
+  const log = context.log;
 
-  const config = await loadConfig(context);
+  log.info(`Processing PR #${pr.number}: ${pr.title}`);
+
+  const config = await loadConfig(ref, pr.base.ref);
 
   if (shouldSkip(context, config)) {
-    context.log.info('Skipping PR based on config/filters');
+    log.info('Skipping PR based on config/filters');
     return;
   }
 
-  // Create in-progress check run visible in the PR immediately
   const inProgressCheck = await context.octokit.checks.create({
     owner,
     repo,
@@ -52,8 +54,13 @@ export async function handlePullRequest(
   });
 
   try {
-    // --- Analyze ---
-    const { gaps, fileContents } = await analyzePR(context, config);
+    const { gaps, fileContents } = await analyzePR(
+      ref,
+      pr.number,
+      pr.head.ref,
+      config,
+      log,
+    );
 
     if (gaps.length === 0) {
       await context.octokit.checks.update({
@@ -70,18 +77,21 @@ export async function handlePullRequest(
       return;
     }
 
-    // --- Generate ---
     const generatedDocs = await generateDocs(gaps, fileContents, config);
     const fileUpdates = applyDocs(generatedDocs, fileContents);
 
-    // --- Commit ---
     let headSha = pr.head.sha;
     if (fileUpdates.length > 0) {
-      const commitSha = await commitDocUpdates(context, config, fileUpdates);
+      const commitSha = await commitDocUpdates(
+        ref,
+        pr.head.ref,
+        config,
+        fileUpdates,
+        log,
+      );
       if (commitSha) headSha = commitSha;
     }
 
-    // --- Report ---
     const documented = new Set(
       generatedDocs.map((d) => `${d.gap.file}:${d.gap.name}`),
     );
@@ -134,7 +144,7 @@ export async function handlePullRequest(
       });
     }
   } catch (error) {
-    context.log.error({ error }, 'Failed to process PR');
+    log.error({ error }, 'Failed to process PR');
 
     await context.octokit.checks.update({
       owner,

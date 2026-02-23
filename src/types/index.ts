@@ -1,5 +1,22 @@
 import type { Context } from 'probot';
 
+/**
+ * Minimal interface for interacting with a specific GitHub repository.
+ * Works with any Probot context type (pull_request, installation, etc.)
+ * so services don't need to know which webhook triggered them.
+ */
+export interface RepoRef {
+  octokit: Context['octokit'];
+  owner: string;
+  repo: string;
+}
+
+export interface Logger {
+  info(msg: string, ...args: unknown[]): void;
+  warn(obj: unknown, msg?: string): void;
+  error(obj: unknown, msg?: string): void;
+}
+
 export interface BotConfig {
   triggers: {
     skip_draft: boolean;
@@ -33,6 +50,11 @@ export interface BotConfig {
   commit: {
     strategy: 'amend' | 'append' | 'skip_if_unchanged';
     message: string;
+  };
+  bootstrap: {
+    enabled: boolean;
+    max_files_per_pr: number;
+    branch: string;
   };
 }
 

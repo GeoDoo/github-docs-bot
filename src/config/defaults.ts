@@ -47,4 +47,9 @@ export const DEFAULT_CONFIG: BotConfig = {
     strategy: 'amend',
     message: 'docs: auto-update documentation [github-docs-bot]',
   },
+  bootstrap: {
+    enabled: true,
+    max_files_per_pr: 50,
+    branch: 'docs/initial-documentation',
+  },
 };

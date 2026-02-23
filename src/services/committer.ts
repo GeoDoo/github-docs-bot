@@ -1,11 +1,10 @@
-import type { Context } from 'probot';
-import type { BotConfig, FileUpdate } from '../types/index.js';
+import type { BotConfig, FileUpdate, RepoRef, Logger } from '../types/index.js';
 import { createCommit, getLatestCommit } from './github.js';
 
 const BOT_COMMIT_MARKER = '[github-docs-bot]';
 
 /**
- * Commits documentation updates to the PR's feature branch.
+ * Commits documentation updates to a branch.
  *
  * When strategy is "amend", replaces the bot's previous commit (if it's at
  * the branch tip) by re-parenting the new commit onto the one before it.
@@ -14,17 +13,18 @@ const BOT_COMMIT_MARKER = '[github-docs-bot]';
  * Returns the new commit SHA, or null if there was nothing to commit.
  */
 export async function commitDocUpdates(
-  context: Context<'pull_request'>,
+  ref: RepoRef,
+  branch: string,
   config: BotConfig,
   fileUpdates: FileUpdate[],
+  log: Logger,
 ): Promise<string | null> {
   if (fileUpdates.length === 0) {
-    context.log.info('No documentation changes to commit');
+    log.info('No documentation changes to commit');
     return null;
   }
 
-  const branch = context.payload.pull_request.head.ref;
-  const latest = await getLatestCommit(context, branch);
+  const latest = await getLatestCommit(ref, branch);
 
   let parentSha: string;
 
@@ -33,7 +33,7 @@ export async function commitDocUpdates(
     latest.message.includes(BOT_COMMIT_MARKER)
   ) {
     parentSha = latest.parentSha;
-    context.log.info(
+    log.info(
       `Amending previous bot commit ${latest.sha.substring(0, 7)}`,
     );
   } else {
@@ -42,33 +42,29 @@ export async function commitDocUpdates(
 
   try {
     const commitSha = await createCommit(
-      context,
+      ref,
       branch,
       config.commit.message,
       fileUpdates,
       parentSha,
     );
 
-    context.log.info(
-      `Created doc commit ${commitSha.substring(0, 7)} on ${branch}`,
-    );
+    log.info(`Created doc commit ${commitSha.substring(0, 7)} on ${branch}`);
     return commitSha;
   } catch (error: unknown) {
     const status = (error as { status?: number }).status;
 
-    // 409 = conflict — the branch was updated while we were generating.
-    // Retry once with the new HEAD as parent.
     if (status === 409) {
-      context.log.warn('Branch was updated during generation, retrying...');
-      const refreshed = await getLatestCommit(context, branch);
+      log.warn({ error }, 'Branch was updated during generation, retrying...');
+      const refreshed = await getLatestCommit(ref, branch);
       const commitSha = await createCommit(
-        context,
+        ref,
         branch,
         config.commit.message,
         fileUpdates,
         refreshed.sha,
       );
-      context.log.info(
+      log.info(
         `Retry succeeded — created doc commit ${commitSha.substring(0, 7)}`,
       );
       return commitSha;

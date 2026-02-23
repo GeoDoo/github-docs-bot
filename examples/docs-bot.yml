@@ -42,3 +42,8 @@ ignore:
 commit:
   strategy: amend         # amend | append
   message: "docs: auto-update documentation [github-docs-bot]"
+
+bootstrap:
+  enabled: true           # Run full-repo scan when app is first installed
+  max_files_per_pr: 50    # Cap files per bootstrap PR (avoids huge PRs)
+  branch: "docs/initial-documentation"

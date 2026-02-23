@@ -8,6 +8,7 @@ public: true
 
 default_events:
   - pull_request
+  - installation
 
 default_permissions:
   contents: write

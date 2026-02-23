@@ -1,53 +1,107 @@
 import { minimatch } from 'minimatch';
-import type { Context } from 'probot';
-import type { BotConfig, DocGap, AnalysisResult } from '../types/index.js';
+import type { BotConfig, DocGap, AnalysisResult, RepoRef, Logger } from '../types/index.js';
 import { getParserForFile } from '../parsers/index.js';
-import { getFileContent, getPRFiles } from './github.js';
+import { getFileContent, getPRFiles, getRepoTree } from './github.js';
 
 const CONCURRENCY = 10;
 
+/**
+ * Analyze only the files changed in a pull request.
+ */
 export async function analyzePR(
-  context: Context<'pull_request'>,
+  ref: RepoRef,
+  prNumber: number,
+  headRef: string,
   config: BotConfig,
+  log: Logger,
 ): Promise<AnalysisResult> {
-  const headRef = context.payload.pull_request.head.ref;
-  const files = await getPRFiles(context);
+  const files = await getPRFiles(ref, prNumber);
 
-  const codeFiles = files.filter((f) => {
-    if (f.status === 'removed') return false;
-    if (config.ignore.paths.some((pattern) => minimatch(f.filename, pattern)))
-      return false;
-    return getParserForFile(f.filename) !== null;
-  });
+  const codeFiles = files
+    .filter((f) => f.status !== 'removed')
+    .filter((f) => !config.ignore.paths.some((p) => minimatch(f.filename, p)))
+    .filter((f) => getParserForFile(f.filename) !== null);
 
-  context.log.info(
+  log.info(
     `Analyzing ${codeFiles.length} code files out of ${files.length} changed`,
   );
 
+  return analyzeFiles(
+    ref,
+    codeFiles.map((f) => f.filename),
+    headRef,
+    config,
+    log,
+  );
+}
+
+/**
+ * Analyze the entire repository by walking the full git tree.
+ * Used during bootstrap when the app is first installed.
+ */
+export async function analyzeRepo(
+  ref: RepoRef,
+  treeSha: string,
+  config: BotConfig,
+  log: Logger,
+): Promise<AnalysisResult> {
+  const { entries, truncated } = await getRepoTree(ref, treeSha);
+
+  if (truncated) {
+    log.warn(
+      { truncated },
+      'Repo tree was truncated by GitHub — very large repos may have incomplete coverage',
+    );
+  }
+
+  const codePaths = entries
+    .map((e) => e.path)
+    .filter((p) => !config.ignore.paths.some((pattern) => minimatch(p, pattern)))
+    .filter((p) => getParserForFile(p) !== null);
+
+  const capped = codePaths.slice(0, config.bootstrap.max_files_per_pr);
+
+  log.info(
+    `Bootstrap: scanning ${capped.length} code files out of ${entries.length} total (cap: ${config.bootstrap.max_files_per_pr})`,
+  );
+
+  return analyzeFiles(ref, capped, treeSha, config, log);
+}
+
+/**
+ * Shared logic: fetch content, parse, and collect gaps for a list of file paths.
+ */
+async function analyzeFiles(
+  ref: RepoRef,
+  filePaths: string[],
+  gitRef: string,
+  config: BotConfig,
+  log: Logger,
+): Promise<AnalysisResult> {
   const allGaps: DocGap[] = [];
   const fileContents = new Map<string, string>();
 
-  for (let i = 0; i < codeFiles.length; i += CONCURRENCY) {
-    const batch = codeFiles.slice(i, i + CONCURRENCY);
+  for (let i = 0; i < filePaths.length; i += CONCURRENCY) {
+    const batch = filePaths.slice(i, i + CONCURRENCY);
 
     await Promise.all(
-      batch.map(async (file) => {
-        const content = await getFileContent(context, file.filename, headRef);
+      batch.map(async (filePath) => {
+        const content = await getFileContent(ref, filePath, gitRef);
         if (!content) return;
 
-        fileContents.set(file.filename, content);
+        fileContents.set(filePath, content);
 
-        const parser = getParserForFile(file.filename);
+        const parser = getParserForFile(filePath);
         if (!parser) return;
 
-        const gaps = parser.parse(content, file.filename, config);
+        const gaps = parser.parse(content, filePath, config);
         allGaps.push(...gaps);
       }),
     );
   }
 
-  context.log.info(
-    `Found ${allGaps.length} documentation gaps across ${codeFiles.length} files`,
+  log.info(
+    `Found ${allGaps.length} documentation gaps across ${fileContents.size} files`,
   );
 
   return { gaps: allGaps, fileContents };

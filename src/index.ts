@@ -1,5 +1,9 @@
 import type { Probot } from 'probot';
 import { handlePullRequest } from './handlers/pull-request.js';
+import {
+  handleInstallationCreated,
+  handleRepositoriesAdded,
+} from './handlers/installation.js';
 import { registerParser } from './parsers/index.js';
 import { typescriptParser } from './parsers/typescript.js';
 import { pythonParser } from './parsers/python.js';
@@ -10,6 +14,7 @@ export default (app: Probot) => {
 
   app.log.info('github-docs-bot is running');
 
+  // --- PR-level documentation (incremental) ---
   app.on(
     [
       'pull_request.opened',
@@ -19,4 +24,8 @@ export default (app: Probot) => {
     ],
     handlePullRequest,
   );
+
+  // --- Installation bootstrap (full-repo scan) ---
+  app.on('installation.created', handleInstallationCreated);
+  app.on('installation_repositories.added', handleRepositoriesAdded);
 };

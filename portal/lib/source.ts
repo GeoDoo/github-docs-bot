@@ -59,15 +59,30 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
+class SlugRegistry {
+  private used = new Set<string>();
+
+  unique(base: string): string {
+    let slug = base;
+    let counter = 1;
+    while (this.used.has(slug)) {
+      slug = `${base}-${++counter}`;
+    }
+    this.used.add(slug);
+    return slug;
+  }
+}
+
 type VirtualFiles = Source<{ pageData: DocsPageData; metaData: MetaData }>['files'];
 
 function addRepoFiles(
   files: VirtualFiles,
   doc: RepoDoc,
   pathPrefix: string,
+  slugs: SlugRegistry,
   categoryName?: string,
 ): void {
-  const repoSlug = slugify(doc.fullName);
+  const repoSlug = slugs.unique(slugify(doc.fullName));
   const base = pathPrefix ? `${pathPrefix}/${repoSlug}` : repoSlug;
 
   files.push({
@@ -158,12 +173,13 @@ function buildSource(
   config: PortalConfig,
 ): Source<{ pageData: DocsPageData; metaData: MetaData }> {
   const files: VirtualFiles = [];
+  const slugs = new SlugRegistry();
   const { categories, uncategorized } = categorizeDocs(docs, config);
 
   const hasCategories = categories.length > 0;
 
   for (const cat of categories) {
-    const catSlug = slugify(cat.name);
+    const catSlug = slugs.unique(slugify(cat.name));
 
     files.push({
       type: 'meta' as const,
@@ -175,7 +191,7 @@ function buildSource(
     });
 
     for (const doc of cat.docs) {
-      addRepoFiles(files, doc, catSlug, cat.name);
+      addRepoFiles(files, doc, catSlug, slugs, cat.name);
     }
   }
 
@@ -190,11 +206,11 @@ function buildSource(
     });
 
     for (const doc of uncategorized) {
-      addRepoFiles(files, doc, 'other');
+      addRepoFiles(files, doc, 'other', slugs);
     }
   } else {
     for (const doc of uncategorized) {
-      addRepoFiles(files, doc, '');
+      addRepoFiles(files, doc, '', slugs);
     }
   }
 

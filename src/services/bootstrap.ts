@@ -9,6 +9,8 @@ import {
 } from './github.js';
 import { documentRepo } from './documenter.js';
 
+const BOOTSTRAP_TIMEOUT_MS = 5 * 60 * 1000;
+
 /**
  * Runs a full-repository documentation scan and opens a PR with the results.
  *
@@ -27,12 +29,19 @@ export async function bootstrapRepo(
   }
 
   const bootstrapBranch = config.bootstrap.branch;
+  const branchAlreadyExists = await branchExists(ref, bootstrapBranch);
 
-  if (await branchExists(ref, bootstrapBranch)) {
+  if (branchAlreadyExists) {
+    const existingPR = await findOpenPR(ref, bootstrapBranch);
+    if (existingPR) {
+      log.info(
+        `Branch ${bootstrapBranch} already exists with open PR #${existingPR} — skipping`,
+      );
+      return null;
+    }
     log.info(
-      `Branch ${bootstrapBranch} already exists — bootstrap was already run, skipping`,
+      `Branch ${bootstrapBranch} exists but no open PR found — cleaning up and re-running`,
     );
-    return null;
   }
 
   const defaultBranch = await getDefaultBranch(ref);
@@ -42,7 +51,22 @@ export async function bootstrapRepo(
     `Starting bootstrap scan of ${ref.owner}/${ref.repo} (${defaultBranch} @ ${head.sha.substring(0, 7)})`,
   );
 
-  const result = await documentRepo(ref, defaultBranch, config, log);
+  let result;
+  try {
+    result = await withTimeout(
+      documentRepo(ref, defaultBranch, config, log),
+      BOOTSTRAP_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('timed out')) {
+      log.warn(
+        { error },
+        `Bootstrap timed out after ${BOOTSTRAP_TIMEOUT_MS / 1000}s for ${ref.owner}/${ref.repo}`,
+      );
+      return null;
+    }
+    throw error;
+  }
 
   if (result.fileUpdates.length === 0) {
     log.info('No documentation changes needed — repo is fully documented');
@@ -51,34 +75,75 @@ export async function bootstrapRepo(
 
   await createBranch(ref, bootstrapBranch, head.sha);
 
-  await createCommit(
-    ref,
-    bootstrapBranch,
-    config.commit.message,
-    result.fileUpdates,
-    head.sha,
-  );
+  try {
+    await createCommit(
+      ref,
+      bootstrapBranch,
+      config.commit.message,
+      result.fileUpdates,
+      head.sha,
+    );
 
-  log.info(
-    `Committed doc updates to ${bootstrapBranch} (${result.fileUpdates.length} files)`,
-  );
+    log.info(
+      `Committed doc updates to ${bootstrapBranch} (${result.fileUpdates.length} files)`,
+    );
 
-  const body = buildBootstrapPRBody(
-    result.insertions.length,
-    result.fileUpdates.length,
-    result.filesAnalyzed,
-    result.fileUpdates.map((f) => f.path),
-  );
+    const body = buildBootstrapPRBody(
+      result.insertions.length,
+      result.fileUpdates.length,
+      result.filesAnalyzed,
+      result.fileUpdates.map((f) => f.path),
+    );
 
-  const prNumber = await createPullRequest(ref, {
-    title: 'docs: add initial documentation for existing codebase',
-    body,
-    head: bootstrapBranch,
-    base: defaultBranch,
+    const prNumber = await createPullRequest(ref, {
+      title: 'docs: add initial documentation for existing codebase',
+      body,
+      head: bootstrapBranch,
+      base: defaultBranch,
+    });
+
+    log.info(`Opened bootstrap PR #${prNumber}`);
+    return { prNumber };
+  } catch (error) {
+    log.error(
+      { error },
+      `Bootstrap commit/PR failed for ${ref.owner}/${ref.repo} — branch ${bootstrapBranch} may need manual cleanup`,
+    );
+    throw error;
+  }
+}
+
+async function findOpenPR(
+  ref: RepoRef,
+  head: string,
+): Promise<number | null> {
+  try {
+    const { data: prs } = await ref.octokit.pulls.list({
+      owner: ref.owner,
+      repo: ref.repo,
+      head: `${ref.owner}:${head}`,
+      state: 'open',
+      per_page: 1,
+    });
+    return prs.length > 0 ? prs[0].number : null;
+  } catch {
+    return null;
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Bootstrap timed out after ${ms}ms`)),
+      ms,
+    );
   });
-
-  log.info(`Opened bootstrap PR #${prNumber}`);
-  return { prNumber };
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
 }
 
 function buildBootstrapPRBody(

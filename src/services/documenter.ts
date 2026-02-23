@@ -34,18 +34,57 @@ interface LLMClient {
   generate(prompt: string): Promise<string>;
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`LLM call timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
+async function withRetry(
+  fn: () => Promise<string>,
+  maxRetries: number,
+): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      lastError = error;
+      const status = (error as { status?: number }).status;
+      if (status === 429 || status === 529 || status === 503) {
+        const delay = Math.min(1000 * 2 ** attempt, 30_000);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 function createClient(config: BotConfig): LLMClient {
   if (config.ai.provider === 'anthropic') {
     const client = new Anthropic();
     return {
       async generate(prompt: string) {
-        const res = await client.messages.create({
-          model: config.ai.model,
-          max_tokens: 4096,
-          messages: [{ role: 'user', content: prompt }],
-        });
-        const block = res.content[0];
-        return block.type === 'text' ? block.text : '';
+        return withRetry(async () => {
+          const res = await withTimeout(
+            client.messages.create({
+              model: config.ai.model,
+              max_tokens: 4096,
+              messages: [{ role: 'user', content: prompt }],
+            }),
+            LLM_TIMEOUT_MS,
+          );
+          const block = res.content[0];
+          return block?.type === 'text' ? block.text : '';
+        }, LLM_MAX_RETRIES);
       },
     };
   }
@@ -53,12 +92,17 @@ function createClient(config: BotConfig): LLMClient {
   const client = new OpenAI();
   return {
     async generate(prompt: string) {
-      const res = await client.chat.completions.create({
-        model: config.ai.model,
-        max_tokens: 4096,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      return res.choices[0]?.message?.content ?? '';
+      return withRetry(async () => {
+        const res = await withTimeout(
+          client.chat.completions.create({
+            model: config.ai.model,
+            max_tokens: 4096,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+          LLM_TIMEOUT_MS,
+        );
+        return res.choices[0]?.message?.content ?? '';
+      }, LLM_MAX_RETRIES);
     },
   };
 }
@@ -68,6 +112,9 @@ function createClient(config: BotConfig): LLMClient {
 // ---------------------------------------------------------------------------
 
 const CONCURRENCY = 5;
+const MAX_FILE_SIZE = 100_000;
+const LLM_TIMEOUT_MS = 60_000;
+const LLM_MAX_RETRIES = 3;
 
 export async function documentPR(
   ref: RepoRef,
@@ -141,6 +188,16 @@ async function documentFiles(
       batch.map(async (filePath) => {
         const content = await getFileContent(ref, filePath, gitRef);
         if (!content) return;
+
+        if (content.length > MAX_FILE_SIZE) {
+          log.info(`Skipping ${filePath} (${content.length} chars exceeds ${MAX_FILE_SIZE} limit)`);
+          return;
+        }
+
+        if (isBinaryContent(content)) {
+          log.info(`Skipping ${filePath} (appears to be binary)`);
+          return;
+        }
 
         fileContents.set(filePath, content);
 
@@ -270,12 +327,30 @@ interface RawInsertion {
 
 function parseResponse(raw: string): RawInsertion[] {
   let cleaned = raw.trim();
+  if (!cleaned) return [];
 
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```\w*\n?/, '').replace(/\n?```$/, '');
   }
 
-  return JSON.parse(cleaned);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.filter(
+    (item): item is RawInsertion =>
+      item != null &&
+      typeof item === 'object' &&
+      typeof item.line === 'number' &&
+      item.line > 0 &&
+      typeof item.name === 'string' &&
+      typeof item.doc === 'string',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,10 +376,12 @@ export function applyInsertions(
 
     const lines = originalContent.split('\n');
 
-    const sorted = [...fileInsertions].sort((a, b) => b.line - a.line);
+    const sorted = [...fileInsertions]
+      .filter((ins) => ins.line >= 1 && ins.line <= lines.length + 1)
+      .sort((a, b) => b.line - a.line);
 
     for (const ins of sorted) {
-      const insertIndex = ins.line - 1;
+      const insertIndex = Math.min(ins.line - 1, lines.length);
       const indentMatch = lines[insertIndex]?.match(/^(\s*)/);
       const indent = indentMatch?.[1] ?? '';
 
@@ -432,3 +509,11 @@ function renderMarkdown(
 function isIgnored(filePath: string, config: BotConfig): boolean {
   return config.ignore.paths.some((pattern) => minimatch(filePath, pattern));
 }
+
+function isBinaryContent(content: string): boolean {
+  const sample = content.slice(0, 8000);
+  const nullCount = (sample.match(/\0/g) ?? []).length;
+  return nullCount > 0;
+}
+
+export const _testExports = { parseResponse, isBinaryContent };

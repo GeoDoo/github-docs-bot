@@ -47,15 +47,17 @@ function deepMerge(
 ): Record<string, unknown> {
   const result = { ...base };
   for (const key of Object.keys(override)) {
-    const baseVal = base[key];
     const overVal = override[key];
+    if (overVal === undefined) continue;
+
+    const baseVal = base[key];
     if (
-      baseVal &&
-      overVal &&
-      typeof baseVal === 'object' &&
+      overVal !== null &&
       typeof overVal === 'object' &&
-      !Array.isArray(baseVal) &&
-      !Array.isArray(overVal)
+      !Array.isArray(overVal) &&
+      baseVal !== null &&
+      typeof baseVal === 'object' &&
+      !Array.isArray(baseVal)
     ) {
       result[key] = deepMerge(
         baseVal as Record<string, unknown>,
@@ -102,7 +104,9 @@ export function getPortalConfig(): PortalConfig {
 
   try {
     const raw = readFileSync(configPath, 'utf-8');
-    const parsed = yaml.load(raw) as Record<string, unknown> | null;
+    const parsed = yaml.load(raw, {
+      schema: yaml.JSON_SCHEMA,
+    }) as Record<string, unknown> | null;
 
     if (!parsed || typeof parsed !== 'object') {
       cachedConfig = DEFAULT_CONFIG;
@@ -124,7 +128,8 @@ export function getPortalConfig(): PortalConfig {
 
     cachedConfig = merged;
     return cachedConfig;
-  } catch {
+  } catch (error) {
+    console.warn('[docs-portal] Failed to load portal.yml, using defaults:', error);
     cachedConfig = DEFAULT_CONFIG;
     return cachedConfig;
   }

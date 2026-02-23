@@ -42,6 +42,37 @@ async function getInstallationOctokit(
   });
 }
 
+async function listAllInstallations(app: Octokit) {
+  const installations = [];
+  let page = 1;
+  while (true) {
+    const { data } = await app.apps.listInstallations({ per_page: 100, page });
+    installations.push(...data);
+    if (data.length < 100) break;
+    page++;
+  }
+  return installations;
+}
+
+interface MinimalRepo {
+  owner: { login: string };
+  name: string;
+  full_name: string;
+}
+
+async function listAllRepos(octokit: Octokit): Promise<MinimalRepo[]> {
+  const repos: MinimalRepo[] = [];
+  let page = 1;
+  while (true) {
+    const { data } =
+      await octokit.apps.listReposAccessibleToInstallation({ per_page: 100, page });
+    repos.push(...data.repositories);
+    if (data.repositories.length < 100) break;
+    page++;
+  }
+  return repos;
+}
+
 async function fetchDocFromRepo(
   octokit: Octokit,
   owner: string,
@@ -89,7 +120,7 @@ async function fetchAutoMode(
   const app = getAppOctokit();
   if (!app) return [];
 
-  const { data: installations } = await app.apps.listInstallations();
+  const installations = await listAllInstallations(app);
   const docs: RepoDoc[] = [];
   const excludeSet = new Set(
     config.repos.exclude.map((e) => e.toLowerCase()),
@@ -103,10 +134,9 @@ async function fetchAutoMode(
       continue;
     }
 
-    const { data: repoList } =
-      await octokit.apps.listReposAccessibleToInstallation({ per_page: 100 });
+    const repos = await listAllRepos(octokit);
 
-    for (const repo of repoList.repositories) {
+    for (const repo of repos) {
       if (excludeSet.has(repo.full_name.toLowerCase())) continue;
 
       const markdown = await fetchDocFromRepo(
@@ -142,7 +172,7 @@ async function fetchManualMode(
   const entries = getAllConfiguredRepos(config);
   if (entries.length === 0) return [];
 
-  const { data: installations } = await app.apps.listInstallations();
+  const installations = await listAllInstallations(app);
 
   const installationMap = new Map<string, number>();
   for (const inst of installations) {
@@ -152,9 +182,8 @@ async function fetchManualMode(
     } catch {
       continue;
     }
-    const { data: repoList } =
-      await octokit.apps.listReposAccessibleToInstallation({ per_page: 100 });
-    for (const repo of repoList.repositories) {
+    const repos = await listAllRepos(octokit);
+    for (const repo of repos) {
       installationMap.set(repo.full_name.toLowerCase(), inst.id);
     }
   }

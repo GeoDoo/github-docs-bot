@@ -18,7 +18,8 @@
     "js-yaml": "^4.1.0",
     "minimatch": "^10.0.1",
     "openai": "^4.85.0",
-    "probot": "^13.4.3"
+    "probot": "^13.4.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

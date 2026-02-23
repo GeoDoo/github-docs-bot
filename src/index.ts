@@ -4,16 +4,8 @@ import {
   handleInstallationCreated,
   handleRepositoriesAdded,
 } from './handlers/installation.js';
-import { registerParser } from './parsers/index.js';
-import { typescriptParser } from './parsers/typescript.js';
-import { pythonParser } from './parsers/python.js';
-import { javaParser } from './parsers/java.js';
 
 export default (app: Probot) => {
-  registerParser(typescriptParser);
-  registerParser(pythonParser);
-  registerParser(javaParser);
-
   app.log.info('github-docs-bot is running');
 
   // --- PR-level documentation (incremental) ---

@@ -1,7 +1,6 @@
 import type { Context } from 'probot';
 import { loadConfig } from '../config/loader.js';
-import { analyzePR } from '../services/analyzer.js';
-import { generateDocs, applyDocs } from '../services/generator.js';
+import { documentPR } from '../services/documenter.js';
 import { commitDocUpdates } from '../services/committer.js';
 import type { BotConfig, RepoRef } from '../types/index.js';
 
@@ -54,15 +53,9 @@ export async function handlePullRequest(
   });
 
   try {
-    const { gaps, fileContents } = await analyzePR(
-      ref,
-      pr.number,
-      pr.head.ref,
-      config,
-      log,
-    );
+    const result = await documentPR(ref, pr.number, pr.head.ref, config, log);
 
-    if (gaps.length === 0) {
+    if (result.insertions.length === 0) {
       await context.octokit.checks.update({
         owner,
         repo,
@@ -71,71 +64,48 @@ export async function handlePullRequest(
         conclusion: 'success',
         output: {
           title: 'All public APIs are documented',
-          summary: 'No documentation gaps found in changed files.',
+          summary: `Scanned ${result.filesAnalyzed} files — no documentation gaps found.`,
         },
       });
       return;
     }
 
-    const generatedDocs = await generateDocs(gaps, fileContents, config);
-    const fileUpdates = applyDocs(generatedDocs, fileContents);
-
     let headSha = pr.head.sha;
-    if (fileUpdates.length > 0) {
+    if (result.fileUpdates.length > 0) {
       const commitSha = await commitDocUpdates(
         ref,
         pr.head.ref,
         config,
-        fileUpdates,
+        result.fileUpdates,
         log,
       );
       if (commitSha) headSha = commitSha;
     }
 
-    const documented = new Set(
-      generatedDocs.map((d) => `${d.gap.file}:${d.gap.name}`),
-    );
-    const remainingGaps = gaps.filter(
-      (g) => !documented.has(`${g.file}:${g.name}`),
-    );
+    const documented = result.insertions.length;
+    const filesUpdated = result.fileUpdates.length;
 
-    const conclusion =
-      remainingGaps.length === 0
-        ? 'success'
-        : config.check.conclusion_on_missing;
-
-    const annotations = remainingGaps.map((gap) => ({
-      path: gap.file,
-      start_line: gap.startLine,
-      end_line: gap.startLine,
-      annotation_level: 'warning' as const,
-      message: `Missing documentation for ${gap.kind} \`${gap.name}\``,
-    }));
-
-    const summary = buildSummary(
-      gaps.length,
-      generatedDocs.length,
-      remainingGaps.length,
-      fileUpdates.length,
-    );
+    const summary = [
+      '| Metric | Count |',
+      '|--------|-------|',
+      `| Files scanned | ${result.filesAnalyzed} |`,
+      `| Doc comments added | ${documented} |`,
+      `| Files updated | ${filesUpdated} |`,
+    ].join('\n');
 
     await context.octokit.checks.update({
       owner,
       repo,
       check_run_id: inProgressCheck.data.id,
       status: 'completed',
-      conclusion,
+      conclusion: 'success',
       output: {
-        title:
-          remainingGaps.length === 0
-            ? `Documented ${generatedDocs.length} element${generatedDocs.length === 1 ? '' : 's'}`
-            : `${remainingGaps.length} element${remainingGaps.length === 1 ? '' : 's'} still need documentation`,
+        title: `Documented ${documented} element${documented === 1 ? '' : 's'} across ${filesUpdated} file${filesUpdated === 1 ? '' : 's'}`,
         summary,
-        annotations: annotations.slice(0, 50),
       },
     });
 
-    if (fileUpdates.length > 0) {
+    if (filesUpdated > 0) {
       await context.octokit.issues.createComment({
         owner,
         repo,
@@ -158,29 +128,4 @@ export async function handlePullRequest(
       },
     });
   }
-}
-
-function buildSummary(
-  totalGaps: number,
-  documented: number,
-  remaining: number,
-  filesUpdated: number,
-): string {
-  const lines: string[] = [
-    '| Metric | Count |',
-    '|--------|-------|',
-    `| Documentation gaps found | ${totalGaps} |`,
-    `| Auto-documented | ${documented} |`,
-    `| Still missing | ${remaining} |`,
-    `| Files updated | ${filesUpdated} |`,
-  ];
-
-  if (remaining > 0) {
-    lines.push(
-      '',
-      '> Some elements could not be auto-documented. See the check annotations for details.',
-    );
-  }
-
-  return lines.join('\n');
 }

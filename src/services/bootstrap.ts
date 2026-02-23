@@ -7,8 +7,7 @@ import {
   createPullRequest,
   branchExists,
 } from './github.js';
-import { analyzeRepo } from './analyzer.js';
-import { generateDocs, applyDocs } from './generator.js';
+import { documentRepo } from './documenter.js';
 
 /**
  * Runs a full-repository documentation scan and opens a PR with the results.
@@ -29,10 +28,9 @@ export async function bootstrapRepo(
 
   const bootstrapBranch = config.bootstrap.branch;
 
-  // Skip if a bootstrap PR branch already exists (avoid duplicate runs)
   if (await branchExists(ref, bootstrapBranch)) {
     log.info(
-      `Branch ${bootstrapBranch} already exists — bootstrap PR was already created, skipping`,
+      `Branch ${bootstrapBranch} already exists — bootstrap was already run, skipping`,
     );
     return null;
   }
@@ -44,53 +42,32 @@ export async function bootstrapRepo(
     `Starting bootstrap scan of ${ref.owner}/${ref.repo} (${defaultBranch} @ ${head.sha.substring(0, 7)})`,
   );
 
-  // --- Analyze ---
-  const { gaps, fileContents } = await analyzeRepo(
-    ref,
-    defaultBranch,
-    config,
-    log,
-  );
+  const result = await documentRepo(ref, defaultBranch, config, log);
 
-  if (gaps.length === 0) {
-    log.info('No documentation gaps found — repo is fully documented');
+  if (result.fileUpdates.length === 0) {
+    log.info('No documentation changes needed — repo is fully documented');
     return null;
   }
 
-  // --- Generate ---
-  const generatedDocs = await generateDocs(gaps, fileContents, config);
-  const fileUpdates = applyDocs(generatedDocs, fileContents);
-
-  if (fileUpdates.length === 0) {
-    log.info('LLM generation produced no file changes');
-    return null;
-  }
-
-  // --- Create branch + commit ---
   await createBranch(ref, bootstrapBranch, head.sha);
 
   await createCommit(
     ref,
     bootstrapBranch,
     config.commit.message,
-    fileUpdates,
+    result.fileUpdates,
     head.sha,
   );
 
   log.info(
-    `Committed doc updates to ${bootstrapBranch} (${fileUpdates.length} files)`,
+    `Committed doc updates to ${bootstrapBranch} (${result.fileUpdates.length} files)`,
   );
 
-  // --- Open PR ---
-  const documented = generatedDocs.length;
-  const remaining = gaps.length - documented;
-
   const body = buildBootstrapPRBody(
-    gaps.length,
-    documented,
-    remaining,
-    fileUpdates.length,
-    fileUpdates.map((f) => f.path),
+    result.insertions.length,
+    result.fileUpdates.length,
+    result.filesAnalyzed,
+    result.fileUpdates.map((f) => f.path),
   );
 
   const prNumber = await createPullRequest(ref, {
@@ -101,15 +78,13 @@ export async function bootstrapRepo(
   });
 
   log.info(`Opened bootstrap PR #${prNumber}`);
-
   return { prNumber };
 }
 
 function buildBootstrapPRBody(
-  totalGaps: number,
-  documented: number,
-  remaining: number,
+  docsAdded: number,
   filesUpdated: number,
+  filesScanned: number,
   filePaths: string[],
 ): string {
   const lines: string[] = [
@@ -123,22 +98,14 @@ function buildBootstrapPRBody(
     '',
     '| Metric | Count |',
     '|--------|-------|',
-    `| Undocumented elements found | ${totalGaps} |`,
-    `| Auto-documented | ${documented} |`,
-    `| Could not be documented | ${remaining} |`,
+    `| Files scanned | ${filesScanned} |`,
+    `| Doc comments added | ${docsAdded} |`,
     `| Files updated | ${filesUpdated} |`,
+    '',
+    '### Files changed',
     '',
   ];
 
-  if (remaining > 0) {
-    lines.push(
-      '> Some elements could not be auto-documented. You may want to add',
-      '> documentation for them manually.',
-      '',
-    );
-  }
-
-  lines.push('### Files changed', '');
   for (const path of filePaths.slice(0, 100)) {
     lines.push(`- \`${path}\``);
   }

@@ -5,20 +5,21 @@ describe('Default Config', () => {
   it('has sensible defaults', () => {
     expect(DEFAULT_CONFIG.triggers.skip_draft).toBe(true);
     expect(DEFAULT_CONFIG.documentation.inline.enabled).toBe(true);
+    expect(DEFAULT_CONFIG.documentation.inline.style).toBe('auto');
     expect(DEFAULT_CONFIG.documentation.inline.scope).toBe('exported_only');
     expect(DEFAULT_CONFIG.ai.provider).toBe('anthropic');
     expect(DEFAULT_CONFIG.check.conclusion_on_missing).toBe('neutral');
     expect(DEFAULT_CONFIG.commit.strategy).toBe('amend');
   });
 
-  it('ignores test files by default', () => {
+  it('ignores test and build files by default', () => {
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/*.test.ts');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/*.spec.ts');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/__tests__/**');
-  });
-
-  it('ignores private functions by default', () => {
-    expect(DEFAULT_CONFIG.ignore.patterns).toContain('_*');
+    expect(DEFAULT_CONFIG.ignore.paths).toContain('**/dist/**');
+    expect(DEFAULT_CONFIG.ignore.paths).toContain('**/build/**');
+    expect(DEFAULT_CONFIG.ignore.paths).toContain('**/vendor/**');
+    expect(DEFAULT_CONFIG.ignore.paths).toContain('**/target/**');
   });
 
   it('has bootstrap enabled by default', () => {

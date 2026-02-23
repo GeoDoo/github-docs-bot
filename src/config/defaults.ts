@@ -9,13 +9,8 @@ export const DEFAULT_CONFIG: BotConfig = {
   documentation: {
     inline: {
       enabled: true,
-      languages: ['typescript', 'javascript', 'python', 'java'],
-      style: 'jsdoc',
+      style: 'auto',
       scope: 'exported_only',
-    },
-    readme: {
-      enabled: false,
-      auto_update_sections: [],
     },
   },
   ai: {
@@ -37,11 +32,14 @@ export const DEFAULT_CONFIG: BotConfig = {
       '**/node_modules/**',
       '**/dist/**',
       '**/build/**',
+      '**/vendor/**',
+      '**/target/**',
       '**/*.d.ts',
       '**/*.min.js',
       '**/*.min.css',
+      '**/*.generated.*',
+      '**/*.pb.go',
     ],
-    patterns: ['_*'],
   },
   commit: {
     strategy: 'amend',

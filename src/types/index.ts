@@ -26,13 +26,8 @@ export interface BotConfig {
   documentation: {
     inline: {
       enabled: boolean;
-      languages: string[];
-      style: 'jsdoc' | 'google' | 'numpy' | 'rustdoc';
+      style: 'auto' | 'jsdoc' | 'google' | 'numpy' | 'rustdoc' | 'javadoc';
       scope: 'exported_only' | 'all';
-    };
-    readme: {
-      enabled: boolean;
-      auto_update_sections: string[];
     };
   };
   ai: {
@@ -45,7 +40,6 @@ export interface BotConfig {
   };
   ignore: {
     paths: string[];
-    patterns: string[];
   };
   commit: {
     strategy: 'amend' | 'append' | 'skip_if_unchanged';
@@ -58,30 +52,8 @@ export interface BotConfig {
   };
 }
 
-export interface DocGap {
-  file: string;
-  name: string;
-  kind: 'function' | 'class' | 'method' | 'interface' | 'type' | 'variable';
-  startLine: number;
-  endLine: number;
-  code: string;
-  existingDoc?: string;
-}
-
-export interface GeneratedDoc {
-  gap: DocGap;
-  documentation: string;
-}
-
 export interface FileUpdate {
   path: string;
   originalContent: string;
   updatedContent: string;
 }
-
-export interface AnalysisResult {
-  gaps: DocGap[];
-  fileContents: Map<string, string>;
-}
-
-export type PullRequestContext = Context<'pull_request'>;

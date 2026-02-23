@@ -9,7 +9,7 @@ export const DEFAULT_CONFIG: BotConfig = {
   documentation: {
     inline: {
       enabled: true,
-      languages: ['typescript', 'javascript', 'python'],
+      languages: ['typescript', 'javascript', 'python', 'java'],
       style: 'jsdoc',
       scope: 'exported_only',
     },

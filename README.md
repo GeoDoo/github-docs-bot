@@ -47,6 +47,7 @@ A GitHub App that automatically generates and maintains documentation for your c
 | TypeScript | `.ts`, `.tsx`, `.mts` | JSDoc |
 | JavaScript | `.js`, `.jsx`, `.mjs` | JSDoc |
 | Python | `.py` | Docstrings (NumPy, Google) |
+| Java | `.java` | Javadoc |
 
 More parsers can be added by implementing the `LanguageParser` interface.
 

@@ -1,0 +1,32 @@
+{
+  "name": "github-docs-bot",
+  "version": "1.0.0",
+  "description": "GitHub App that automatically generates and maintains documentation for your codebase",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx probot run ./dist/index.js",
+    "start": "probot run ./dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/ --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "js-yaml": "^4.1.0",
+    "minimatch": "^10.0.1",
+    "openai": "^4.85.0",
+    "probot": "^13.4.3"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.13.4",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

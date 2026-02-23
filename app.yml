@@ -1,0 +1,16 @@
+# GitHub App manifest — used for easy registration via /setup
+# See: https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest
+
+name: github-docs-bot
+description: Automatically generates and maintains documentation for your codebase
+url: https://github.com/your-org/github-docs-bot
+public: true
+
+default_events:
+  - pull_request
+
+default_permissions:
+  contents: write
+  pull_requests: write
+  checks: write
+  metadata: read

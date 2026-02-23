@@ -1,0 +1,44 @@
+# Example .github/docs-bot.yml — copy this to your repo's .github/ directory
+# All values shown are defaults; only override what you need to change.
+
+triggers:
+  skip_draft: true
+  skip_labels: ["no-docs", "wip"]
+  only_on_ready_for_review: false
+
+documentation:
+  inline:
+    enabled: true
+    languages: [typescript, javascript, python]
+    style: jsdoc          # jsdoc | google | numpy | rustdoc
+    scope: exported_only  # exported_only | all
+  readme:
+    enabled: false
+    auto_update_sections: []
+
+ai:
+  provider: anthropic     # anthropic | openai
+  model: claude-sonnet-4-20250514
+  custom_instructions: |
+    Use imperative mood ("Return" not "Returns").
+    Always include @example tags with realistic usage.
+    Keep descriptions under 2 sentences.
+
+check:
+  # What to report when docs are still missing after generation.
+  # "failure" blocks the PR, "neutral" is informational only, "success" always passes.
+  conclusion_on_missing: neutral
+
+ignore:
+  paths:
+    - "**/*.test.ts"
+    - "**/*.spec.ts"
+    - "**/__tests__/**"
+    - "**/dist/**"
+    - "**/generated/**"
+  patterns:
+    - "_*"                # skip functions starting with _
+
+commit:
+  strategy: amend         # amend | append
+  message: "docs: auto-update documentation [github-docs-bot]"

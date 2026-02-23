@@ -3,6 +3,7 @@ import type { RepoRef } from '../types/index.js';
 import { loadConfig } from '../config/loader.js';
 import { getDefaultBranch } from '../services/github.js';
 import { bootstrapRepo } from '../services/bootstrap.js';
+import { notifyPortalRevalidation } from '../services/revalidate.js';
 
 type InstallationCreatedContext = Context<'installation.created'>;
 type ReposAddedContext = Context<'installation_repositories.added'>;
@@ -60,6 +61,7 @@ async function bootstrapSingleRepo(
       log.info(
         `Bootstrap complete for ${owner}/${repoName}: PR #${result.prNumber}`,
       );
+      await notifyPortalRevalidation(`${owner}/${repoName}`, log);
     }
   } catch (error) {
     log.error(

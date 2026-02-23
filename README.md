@@ -173,7 +173,28 @@ src/
     ├── extensions.ts         # Code file extension registry (filter gate for the LLM)
     ├── documenter.ts         # Unified LLM pipeline: fetch → analyze → generate → apply
     ├── committer.ts          # Commit strategy (amend / append) with conflict retry
-    └── bootstrap.ts          # Full-repo scan → branch → commit → open PR
+    ├── bootstrap.ts          # Full-repo scan → branch → commit → open PR
+    └── revalidate.ts         # Notifies docs portal to refresh after doc commits
+
+portal/                       # Docs portal (Fumadocs / Next.js)
+├── app/
+│   ├── layout.tsx            # Root layout with Fumadocs provider, Geist font
+│   ├── page.tsx              # Landing page: hero + repo cards
+│   ├── global.css            # Ocean theme + Stripe prose styles
+│   ├── docs/
+│   │   ├── layout.tsx        # Docs layout with sidebar navigation
+│   │   └── [[...slug]]/
+│   │       └── page.tsx      # Dynamic doc page with TOC + rendered markdown
+│   └── api/
+│       └── revalidate/
+│           └── route.ts      # Webhook for instant ISR cache purge
+├── lib/
+│   ├── config.ts             # Portal constants (revalidation interval, file paths)
+│   ├── github.ts             # GitHub App auth + fetch docs/API.md from all installs
+│   ├── source.ts             # Fumadocs content source: GitHub markdown → page tree
+│   └── markdown.ts           # Remark/Rehype pipeline for rendering raw markdown
+└── components/
+    └── theme.tsx             # Stripe-style UI components (badges, headers)
 ```
 
 ## Testing
@@ -194,7 +215,60 @@ The bot already supports any language the LLM understands. To add a new file
 extension to the code file filter, add it to the `CODE_EXTENSIONS` set in
 `src/services/extensions.ts`. That's it — the LLM handles everything else.
 
-## Deployment
+## Docs Portal
+
+The `portal/` directory contains a standalone Next.js documentation site (powered by [Fumadocs](https://fumadocs.vercel.app)) that aggregates the public API docs from every repository where the bot is installed.
+
+### How it works
+
+1. Authenticates as the GitHub App (same credentials as the bot)
+2. Lists all installations and their repositories
+3. Fetches `docs/API.md` from each repo via the Contents API
+4. Renders them as a unified, Stripe-styled documentation site with sidebar navigation, TOC, and search
+5. Uses ISR (Incremental Static Regeneration) to stay fresh — revalidates every 5 minutes, or instantly when the bot triggers the `/api/revalidate` webhook
+
+### Portal setup
+
+```bash
+cd portal
+cp .env.example .env
+```
+
+Fill in your `.env`:
+
+```
+GITHUB_APP_ID=123456
+GITHUB_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n..."
+REVALIDATE_SECRET=a-random-secret
+NEXT_PUBLIC_SITE_URL=https://docs.your-domain.com
+```
+
+Install and run:
+
+```bash
+npm install
+npm run dev
+```
+
+### Deploy to Vercel
+
+1. Import the repo into [Vercel](https://vercel.com)
+2. Set the **Root Directory** to `portal/`
+3. Add the environment variables listed above
+4. Deploy — Vercel auto-detects Next.js and handles everything
+
+### Instant revalidation
+
+To get instant doc updates (instead of waiting for ISR), add these to the **bot's** `.env`:
+
+```
+PORTAL_URL=https://docs.your-domain.com
+PORTAL_REVALIDATE_SECRET=a-random-secret   # must match the portal's REVALIDATE_SECRET
+```
+
+The bot will call the portal's `/api/revalidate` webhook after every documentation commit.
+
+## Bot Deployment
 
 The bot is stateless and works well in serverless environments:
 

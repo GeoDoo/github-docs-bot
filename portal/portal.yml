@@ -1,0 +1,51 @@
+# ============================================================================
+# Docs Portal Configuration
+# ============================================================================
+#
+# This file controls which repos appear in the docs portal, how they're
+# organized, and the site metadata displayed on the landing page.
+#
+# Two modes are available:
+#
+#   mode: auto    — Discover all repos where the GitHub App is installed.
+#                   Repos with docs/API.md appear automatically.
+#                   Use `exclude` to hide specific repos.
+#
+#   mode: manual  — Only repos explicitly listed in `categories` appear.
+#                   Full control over grouping, ordering, and display names.
+#
+# In either mode, you can define `categories` to organize repos into groups.
+# In auto mode, discovered repos not assigned to a category appear under "Other".
+# ============================================================================
+
+site:
+  title: "API Documentation"
+  description: "Unified public API reference across all repositories"
+
+repos:
+  mode: auto
+
+  # Repos to hide when mode is "auto" (ignored in manual mode):
+  # exclude:
+  #   - "your-org/internal-scripts"
+  #   - "your-org/deprecated-service"
+
+  # Organize repos into sidebar groups.
+  # In "manual" mode, only these repos appear.
+  # In "auto" mode, these get structured and the rest go under "Other".
+  #
+  # categories:
+  #   - name: "Core Services"
+  #     repos:
+  #       - repo: "your-org/user-service"
+  #         title: "User Service"
+  #         description: "Authentication and user management"
+  #       - repo: "your-org/billing-api"
+  #         title: "Billing API"
+  #
+  #   - name: "SDKs"
+  #     repos:
+  #       - repo: "your-org/js-sdk"
+  #         title: "JavaScript SDK"
+  #       - repo: "your-org/python-sdk"
+  #         title: "Python SDK"

@@ -12,6 +12,10 @@ export const DEFAULT_CONFIG: BotConfig = {
       style: 'auto',
       scope: 'exported_only',
     },
+    reference: {
+      enabled: true,
+      output_dir: 'docs',
+    },
   },
   ai: {
     provider: 'anthropic',

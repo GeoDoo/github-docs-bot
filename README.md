@@ -2,8 +2,9 @@
 
 A GitHub App that automatically generates and maintains documentation for your codebase.
 
-- **On install** — runs a full-repo scan, generates docs for all undocumented public APIs, and opens a bootstrap PR.
+- **On install** — runs a full-repo scan, generates docs for all undocumented APIs, and opens a bootstrap PR.
 - **On every PR** — analyzes changed files, generates docs for new/modified code, and commits directly to the feature branch.
+- **Public vs Internal** — every documented element is classified by visibility and rendered into separate reference files: `docs/API.md` (public contract) and `docs/INTERNALS.md` (implementation details).
 
 ## How it works
 
@@ -124,6 +125,9 @@ documentation:
     enabled: true
     style: auto            # auto | jsdoc | google | numpy | rustdoc | javadoc
     scope: exported_only   # exported_only | all
+  reference:
+    enabled: true          # Generate docs/API.md and docs/INTERNALS.md
+    output_dir: docs       # Where to write the reference files
 
 ai:
   provider: anthropic     # anthropic | openai
@@ -181,7 +185,8 @@ npm test
 Tests cover:
 - Code file extension registry: recognizes 30+ code file types, rejects non-code
 - Doc insertion application: correct line placement, multi-file, indentation preservation
-- Config defaults: sensible out-of-the-box values (bootstrap, ignore paths, style: auto)
+- Reference doc generation: public/internal separation, file grouping, custom output dirs
+- Config defaults: sensible out-of-the-box values (bootstrap, reference docs, ignore paths)
 
 ## Adding support for new file types
 

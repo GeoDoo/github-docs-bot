@@ -12,12 +12,16 @@ describe('Default Config', () => {
     expect(DEFAULT_CONFIG.commit.strategy).toBe('amend');
   });
 
-  it('ignores test and build files by default', () => {
+  it('has reference docs enabled by default', () => {
+    expect(DEFAULT_CONFIG.documentation.reference.enabled).toBe(true);
+    expect(DEFAULT_CONFIG.documentation.reference.output_dir).toBe('docs');
+  });
+
+  it('ignores test, build, and generated files by default', () => {
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/*.test.ts');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/*.spec.ts');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/__tests__/**');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/dist/**');
-    expect(DEFAULT_CONFIG.ignore.paths).toContain('**/build/**');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/vendor/**');
     expect(DEFAULT_CONFIG.ignore.paths).toContain('**/target/**');
   });

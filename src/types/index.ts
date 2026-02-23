@@ -29,6 +29,10 @@ export interface BotConfig {
       style: 'auto' | 'jsdoc' | 'google' | 'numpy' | 'rustdoc' | 'javadoc';
       scope: 'exported_only' | 'all';
     };
+    reference: {
+      enabled: boolean;
+      output_dir: string;
+    };
   };
   ai: {
     provider: 'anthropic' | 'openai';

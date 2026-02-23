@@ -14,6 +14,9 @@ export interface DocInsertion {
   line: number;
   name: string;
   kind: string;
+  visibility: 'public' | 'internal';
+  signature: string;
+  description: string;
   doc: string;
 }
 
@@ -117,7 +120,7 @@ export async function documentRepo(
 }
 
 // ---------------------------------------------------------------------------
-// Core pipeline: fetch → LLM → apply
+// Core pipeline: fetch → LLM → apply → reference docs
 // ---------------------------------------------------------------------------
 
 async function documentFiles(
@@ -159,10 +162,18 @@ async function documentFiles(
     );
   }
 
-  const fileUpdates = applyInsertions(allInsertions, fileContents);
+  const fileUpdates: FileUpdate[] = [];
+
+  if (config.documentation.inline.enabled) {
+    fileUpdates.push(...applyInsertions(allInsertions, fileContents));
+  }
+
+  if (config.documentation.reference.enabled && allInsertions.length > 0) {
+    fileUpdates.push(...generateReferenceDocs(allInsertions, config));
+  }
 
   log.info(
-    `Generated ${allInsertions.length} doc comments across ${fileContents.size} files (${fileUpdates.length} files changed)`,
+    `Generated ${allInsertions.length} doc entries across ${fileContents.size} files (${fileUpdates.length} files changed)`,
   );
 
   return {
@@ -183,8 +194,8 @@ function buildPrompt(
 ): string {
   const scope =
     config.documentation.inline.scope === 'all'
-      ? 'Document ALL functions, classes, methods, interfaces, types, and enums — including private ones.'
-      : 'Document only public/exported APIs. Skip private/internal elements.';
+      ? 'Analyze ALL functions, classes, methods, interfaces, types, and enums — including private ones.'
+      : 'Analyze ALL elements regardless of visibility, but classify each as "public" or "internal".';
 
   const style =
     config.documentation.inline.style === 'auto'
@@ -195,9 +206,9 @@ function buildPrompt(
     ? `\nAdditional instructions from the repository owner:\n${config.ai.custom_instructions}\n`
     : '';
 
-  return `You are a documentation generator. Analyze this code file and identify all undocumented elements that need documentation.
+  return `You are a documentation generator. Analyze this code file and identify all undocumented elements.
 
-Scope: ${scope}
+${scope}
 Style: ${style}
 ${customInstructions}
 File: ${filePath}
@@ -209,6 +220,9 @@ For each undocumented element, return a JSON array of objects with:
 - "line": the 1-indexed line number to insert the documentation comment BEFORE
 - "name": the name of the element
 - "kind": one of "function", "class", "method", "interface", "type", "variable", "enum"
+- "visibility": "public" if the element is exported/public-facing, "internal" if it is private/internal/unexported
+- "signature": the full signature as it appears in the code (e.g., "export function calculateTotal(items: number[], tax: number): number")
+- "description": a plain-text one-sentence description of what this element does
 - "doc": the complete documentation comment including delimiters
 
 If the file is fully documented or has no documentable APIs, return: []
@@ -217,6 +231,7 @@ RULES:
 - Only add documentation where none exists. Do NOT replace or modify existing docs.
 - Match the tone and style of any existing documentation in the file.
 - Be concise but thorough — describe purpose, parameters, and return values.
+- Classify visibility accurately: exported/public = "public", private/internal/unexported = "internal".
 - Do NOT wrap the response in markdown code fences.
 - Return ONLY valid JSON, nothing else.`;
 }
@@ -236,13 +251,24 @@ async function analyzeAndDocument(
     line: item.line,
     name: item.name,
     kind: item.kind,
+    visibility: item.visibility === 'internal' ? 'internal' : 'public',
+    signature: item.signature,
+    description: item.description,
     doc: item.doc,
   }));
 }
 
-function parseResponse(
-  raw: string,
-): Array<{ line: number; name: string; kind: string; doc: string }> {
+interface RawInsertion {
+  line: number;
+  name: string;
+  kind: string;
+  visibility: string;
+  signature: string;
+  description: string;
+  doc: string;
+}
+
+function parseResponse(raw: string): RawInsertion[] {
   let cleaned = raw.trim();
 
   if (cleaned.startsWith('```')) {
@@ -253,7 +279,7 @@ function parseResponse(
 }
 
 // ---------------------------------------------------------------------------
-// Apply insertions to file content
+// Apply inline doc insertions to file content
 // ---------------------------------------------------------------------------
 
 export function applyInsertions(
@@ -275,7 +301,6 @@ export function applyInsertions(
 
     const lines = originalContent.split('\n');
 
-    // Sort descending by line so insertions don't shift subsequent indices
     const sorted = [...fileInsertions].sort((a, b) => b.line - a.line);
 
     for (const ins of sorted) {
@@ -298,6 +323,106 @@ export function applyInsertions(
   }
 
   return updates;
+}
+
+// ---------------------------------------------------------------------------
+// Generate reference docs: API.md (public) + INTERNALS.md (internal)
+// ---------------------------------------------------------------------------
+
+export function generateReferenceDocs(
+  insertions: DocInsertion[],
+  config: BotConfig,
+): FileUpdate[] {
+  const dir = config.documentation.reference.output_dir;
+
+  const publicItems = insertions.filter((i) => i.visibility === 'public');
+  const internalItems = insertions.filter((i) => i.visibility === 'internal');
+
+  const updates: FileUpdate[] = [];
+
+  if (publicItems.length > 0) {
+    updates.push({
+      path: `${dir}/API.md`,
+      originalContent: '',
+      updatedContent: renderMarkdown(
+        'Public API Reference',
+        'PUBLIC',
+        'These are the public-facing APIs of this project. They form the external contract and should be considered stable.',
+        publicItems,
+      ),
+    });
+  }
+
+  if (internalItems.length > 0) {
+    updates.push({
+      path: `${dir}/INTERNALS.md`,
+      originalContent: '',
+      updatedContent: renderMarkdown(
+        'Internal Reference',
+        'INTERNAL',
+        'These are internal implementation details. They are not part of the public API and may change without notice.',
+        internalItems,
+      ),
+    });
+  }
+
+  return updates;
+}
+
+function renderMarkdown(
+  title: string,
+  badge: string,
+  preamble: string,
+  items: DocInsertion[],
+): string {
+  const lines: string[] = [
+    `# ${title}`,
+    '',
+    `> **${badge}** — ${preamble}`,
+    '',
+    '---',
+    '',
+  ];
+
+  // Group by source file
+  const byFile = new Map<string, DocInsertion[]>();
+  for (const item of items) {
+    const existing = byFile.get(item.file) ?? [];
+    existing.push(item);
+    byFile.set(item.file, existing);
+  }
+
+  for (const [file, fileItems] of byFile) {
+    lines.push(`## \`${file}\``, '');
+
+    // Sort by line number within each file
+    const sorted = [...fileItems].sort((a, b) => a.line - b.line);
+
+    for (const item of sorted) {
+      lines.push(`### ${item.name}`, '');
+      lines.push(`- **Kind:** ${item.kind}`);
+      lines.push(`- **Visibility:** ${item.visibility}`);
+      lines.push('');
+
+      if (item.signature) {
+        lines.push('```', item.signature, '```', '');
+      }
+
+      if (item.description) {
+        lines.push(item.description, '');
+      }
+
+      lines.push('---', '');
+    }
+  }
+
+  lines.push(
+    '',
+    '*Auto-generated by [github-docs-bot](https://github.com/GeoDoo/github-docs-bot). Do not edit manually.*',
+    '',
+  );
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,9 @@ documentation:
     enabled: true
     style: auto            # auto | jsdoc | google | numpy | rustdoc | javadoc
     scope: exported_only   # exported_only | all
+  reference:
+    enabled: true          # Generate docs/API.md and docs/INTERNALS.md
+    output_dir: docs       # Where to write the reference files
 
 ai:
   provider: anthropic      # anthropic | openai

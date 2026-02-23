@@ -37,6 +37,11 @@ export default async function Page({ params }: PageProps) {
           <span className="inline-flex items-center rounded-md bg-stripe-purple/10 px-2.5 py-0.5 text-xs font-medium text-stripe-purple ring-1 ring-inset ring-stripe-purple/20">
             PUBLIC API
           </span>
+          {data.isPrivate && (
+            <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-600 ring-1 ring-inset ring-amber-500/20">
+              PRIVATE REPO
+            </span>
+          )}
           <a
             href={`https://github.com/${data.fullName}`}
             target="_blank"

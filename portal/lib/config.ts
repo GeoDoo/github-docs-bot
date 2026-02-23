@@ -20,6 +20,7 @@ export interface PortalConfig {
   };
   repos: {
     mode: 'auto' | 'manual';
+    include_private: boolean;
     exclude: string[];
     categories: Category[];
   };
@@ -34,6 +35,7 @@ const DEFAULT_CONFIG: PortalConfig = {
   },
   repos: {
     mode: 'auto',
+    include_private: false,
     exclude: [],
     categories: [],
   },

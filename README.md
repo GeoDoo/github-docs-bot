@@ -111,6 +111,10 @@ npm run dev
 
 Go to your GitHub App's settings page and install it on the repositories you want to document. The bot will immediately open a bootstrap PR for any repo with undocumented code.
 
+> **Private repos:** The app works with both public and private repositories. When installing, choose "All repositories" or select specific repos (including private ones). The bot uses the installation token granted by GitHub, so it has access to whatever repos you authorize — no extra configuration needed.
+>
+> **Portal safety:** If you use the docs portal, private repo docs are **excluded by default** to prevent accidental public exposure. To include them, set `include_private: true` in `portal.yml` (see [Portal configuration](#portal-configuration)).
+
 ## Repository configuration
 
 Each repo can customize the bot's behavior by adding a `.github/docs-bot.yml` file:
@@ -240,10 +244,13 @@ site:
 
 repos:
   mode: auto
+  include_private: false  # default — set true to include private repos on the portal
   exclude:
     - "acme/internal-scripts"
     - "acme/deprecated-service"
 ```
+
+> **`include_private`** (default: `false`) — When `false`, docs from private repositories are excluded from the portal to prevent accidental exposure on a public site. Set to `true` only if your portal is behind authentication or intended for internal use. In manual mode, explicitly listed private repos are always included (you listed them intentionally). Private repos show a "PRIVATE" badge on the portal.
 
 **Manual mode** — only explicitly listed repos appear, organized into categories:
 

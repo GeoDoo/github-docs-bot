@@ -13,6 +13,7 @@ export interface DocsPageData extends PageData {
   repo: string;
   owner: string;
   fullName: string;
+  isPrivate: boolean;
   category?: string;
   structuredBody: { raw: string };
 }
@@ -105,6 +106,7 @@ function addRepoFiles(
       repo: doc.repo,
       owner: doc.owner,
       fullName: doc.fullName,
+      isPrivate: doc.isPrivate,
       category: categoryName,
       structuredBody: { raw: sections[0].content },
     },
@@ -122,6 +124,7 @@ function addRepoFiles(
         repo: doc.repo,
         owner: doc.owner,
         fullName: doc.fullName,
+        isPrivate: doc.isPrivate,
         category: categoryName,
         structuredBody: { raw: section.content },
       },

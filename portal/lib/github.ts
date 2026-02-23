@@ -10,6 +10,7 @@ export interface RepoDoc {
   title: string;
   description: string;
   markdown: string;
+  isPrivate: boolean;
 }
 
 let cachedAppOctokit: Octokit | null = null;
@@ -58,6 +59,7 @@ interface MinimalRepo {
   owner: { login: string };
   name: string;
   full_name: string;
+  private: boolean;
 }
 
 async function listAllRepos(octokit: Octokit): Promise<MinimalRepo[]> {
@@ -100,6 +102,7 @@ function enrichDoc(
   repoName: string,
   fullName: string,
   markdown: string,
+  isPrivate: boolean,
   config: PortalConfig,
 ): RepoDoc {
   const override = findRepoConfig(config, fullName);
@@ -111,6 +114,7 @@ function enrichDoc(
     description:
       override?.description ?? `Public API reference for ${fullName}`,
     markdown,
+    isPrivate,
   };
 }
 
@@ -138,6 +142,7 @@ async function fetchAutoMode(
 
     for (const repo of repos) {
       if (excludeSet.has(repo.full_name.toLowerCase())) continue;
+      if (repo.private && !config.repos.include_private) continue;
 
       const markdown = await fetchDocFromRepo(
         octokit,
@@ -153,6 +158,7 @@ async function fetchAutoMode(
             repo.name,
             repo.full_name,
             markdown,
+            repo.private,
             config,
           ),
         );
@@ -175,6 +181,7 @@ async function fetchManualMode(
   const installations = await listAllInstallations(app);
 
   const installationMap = new Map<string, number>();
+  const repoVisibility = new Map<string, boolean>();
   for (const inst of installations) {
     let octokit: Octokit;
     try {
@@ -185,6 +192,7 @@ async function fetchManualMode(
     const repos = await listAllRepos(octokit);
     for (const repo of repos) {
       installationMap.set(repo.full_name.toLowerCase(), inst.id);
+      repoVisibility.set(repo.full_name.toLowerCase(), repo.private);
     }
   }
 
@@ -212,7 +220,8 @@ async function fetchManualMode(
     );
 
     if (markdown) {
-      docs.push(enrichDoc(owner, repoName, entry.repo, markdown, config));
+      const isPrivate = repoVisibility.get(entry.repo.toLowerCase()) ?? false;
+      docs.push(enrichDoc(owner, repoName, entry.repo, markdown, isPrivate, config));
     }
   }
 

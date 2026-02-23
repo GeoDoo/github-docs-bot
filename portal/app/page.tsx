@@ -39,9 +39,16 @@ function RepoCard({ doc, categorySlug }: { doc: RepoDoc; categorySlug?: string }
           </svg>
         </div>
         <div>
-          <h3 className="font-semibold text-fd-foreground group-hover:text-stripe-purple transition-colors">
-            {doc.title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-fd-foreground group-hover:text-stripe-purple transition-colors">
+              {doc.title}
+            </h3>
+            {doc.isPrivate && (
+              <span className="inline-flex items-center rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 ring-1 ring-inset ring-amber-500/20">
+                PRIVATE
+              </span>
+            )}
+          </div>
           <p className="text-sm text-fd-muted-foreground">{doc.description}</p>
         </div>
       </div>

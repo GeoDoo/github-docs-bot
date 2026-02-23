@@ -25,6 +25,12 @@ site:
 repos:
   mode: auto
 
+  # Include docs from private repos? Default is false to prevent
+  # accidental exposure on a public portal. Set true if your portal
+  # is behind auth or intended for internal use.
+  # In manual mode, explicitly listed repos are always included.
+  # include_private: false
+
   # Repos to hide when mode is "auto" (ignored in manual mode):
   # exclude:
   #   - "your-org/internal-scripts"

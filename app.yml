@@ -15,3 +15,7 @@ default_permissions:
   pull_requests: write
   checks: write
   metadata: read
+
+# "Where can this GitHub App be installed?"
+# Set to "all" to allow installation on both public and private repos.
+setup_on_update: true

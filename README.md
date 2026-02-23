@@ -189,9 +189,9 @@ portal/                       # Docs portal (Fumadocs / Next.js)
 │       └── revalidate/
 │           └── route.ts      # Webhook for instant ISR cache purge
 ├── lib/
-│   ├── config.ts             # Portal constants (revalidation interval, file paths)
+│   ├── config.ts             # YAML config loader (portal.yml): types, parsing, repo lookup
 │   ├── github.ts             # GitHub App auth + fetch docs/API.md from all installs
-│   ├── source.ts             # Fumadocs content source: GitHub markdown → page tree
+│   ├── source.ts             # Fumadocs content source: GitHub markdown → categorized page tree
 │   └── markdown.ts           # Remark/Rehype pipeline for rendering raw markdown
 └── components/
     └── theme.tsx             # Stripe-style UI components (badges, headers)
@@ -226,6 +226,54 @@ The `portal/` directory contains a standalone Next.js documentation site (powere
 3. Fetches `docs/API.md` from each repo via the Contents API
 4. Renders them as a unified, Stripe-styled documentation site with sidebar navigation, TOC, and search
 5. Uses ISR (Incremental Static Regeneration) to stay fresh — revalidates every 5 minutes, or instantly when the bot triggers the `/api/revalidate` webhook
+
+### Portal configuration
+
+The portal is configured via `portal/portal.yml`. This controls which repos appear, how they're organized, and the site metadata.
+
+**Auto mode** (default) — discovers all repos where the app is installed:
+
+```yaml
+site:
+  title: "Acme API Docs"
+  description: "Public API reference for all Acme services"
+
+repos:
+  mode: auto
+  exclude:
+    - "acme/internal-scripts"
+    - "acme/deprecated-service"
+```
+
+**Manual mode** — only explicitly listed repos appear, organized into categories:
+
+```yaml
+site:
+  title: "Acme API Docs"
+  description: "Public API reference for all Acme services"
+
+repos:
+  mode: manual
+  categories:
+    - name: "Core Services"
+      repos:
+        - repo: "acme/user-service"
+          title: "User Service"
+          description: "Authentication and user management"
+        - repo: "acme/billing-api"
+          title: "Billing API"
+
+    - name: "SDKs"
+      repos:
+        - repo: "acme/js-sdk"
+          title: "JavaScript SDK"
+        - repo: "acme/python-sdk"
+          title: "Python SDK"
+```
+
+Categories become sidebar groups. In auto mode, you can also define categories — categorized repos get structured, the rest appear under "Other". Each repo entry supports optional `title` and `description` overrides.
+
+If no `portal.yml` exists, the portal falls back to auto-discovering everything with default metadata.
 
 ### Portal setup
 

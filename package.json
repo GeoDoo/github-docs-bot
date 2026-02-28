@@ -16,7 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "js-yaml": "^4.1.0",
-    "minimatch": "^10.0.1",
+    "minimatch": "^10.2.3",
     "openai": "^4.85.0",
     "probot": "^13.4.3",
     "zod": "^3.25.76"
